@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JarvisHands</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', system-ui, sans-serif; background: #0a0a0f; color: #e0e0e0; min-height: 100vh; }
+        .header { display:flex; align-items:center; justify-content:space-between; padding:16px 24px; background:#111118; border-bottom:1px solid #222; }
+        .header h1 { font-size:20px; font-weight:600; color:#fff; }
+        .header .status { display:flex; align-items:center; gap:8px; font-size:13px; }
+        .status-dot { width:8px; height:8px; border-radius:50%; background:#444; }
+        .status-dot.active { background:#4ade80; box-shadow:0 0 8px #4ade8066; }
+        .main { display:grid; grid-template-columns:1fr 420px; gap:0; height:calc(100vh - 57px); }
+        .camera-panel { position:relative; background:#000; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+        .camera-panel img { width:100%; height:100%; object-fit:contain; }
+        .gesture-overlay { position:absolute; bottom:20px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.7); backdrop-filter:blur(10px); border:1px solid #333; border-radius:12px; padding:12px 24px; text-align:center; min-width:200px; }
+        .gesture-name { font-size:22px; font-weight:600; color:#4ade80; }
+        .gesture-conf { font-size:12px; color:#888; margin-top:2px; }
+        .side-panel { background:#111118; border-left:1px solid #222; overflow-y:auto; display:flex; flex-direction:column; }
+        .tabs { display:flex; border-bottom:1px solid #222; }
+        .tab { flex:1; padding:12px 8px; text-align:center; font-size:12px; font-weight:500; color:#888; cursor:pointer; border-bottom:2px solid transparent; transition:all 0.15s; }
+        .tab:hover { color:#ccc; }
+        .tab.active { color:#fff; border-bottom-color:#6366f1; }
+        .tab-content { display:none; padding:16px; flex:1; overflow-y:auto; }
+        .tab-content.active { display:block; }
+        .section { margin-bottom:20px; }
+        .section h3 { font-size:13px; color:#aaa; margin-bottom:10px; text-transform:uppercase; letter-spacing:0.5px; }
+        input[type="text"], textarea, select { width:100%; padding:8px 12px; background:#1a1a24; border:1px solid #333; border-radius:8px; color:#fff; font-size:14px; outline:none; font-family:inherit; margin-bottom:8px; }
+        input:focus, textarea:focus, select:focus { border-color:#6366f1; }
+        textarea { font-family:'SF Mono','Menlo',monospace; font-size:12px; min-height:60px; resize:vertical; }
+        .btn { padding:8px 16px; border-radius:8px; border:none; font-size:13px; font-weight:500; cursor:pointer; transition:all 0.15s; }
+        .btn-primary { background:#6366f1; color:#fff; }
+        .btn-primary:hover { background:#5558e6; }
+        .btn:disabled { background:#333 !important; color:#666 !important; cursor:not-allowed; }
+        .btn-success { background:#22c55e; color:#fff; }
+        .btn-success:hover { background:#1db954; }
+        .btn-danger { background:#ef4444; color:#fff; }
+        .btn-danger:hover { background:#dc2626; }
+        .btn-outline { background:transparent; border:1px solid #333; color:#ccc; }
+        .btn-outline:hover { border-color:#6366f1; color:#fff; }
+        .btn-sm { padding:4px 10px; font-size:11px; }
+        .btn-lg { padding:12px 24px; font-size:15px; width:100%; }
+        .gesture-list { display:flex; flex-direction:column; gap:6px; }
+        .gesture-card { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:#1a1a24; border:1px solid #282830; border-radius:8px; }
+        .gesture-card:hover { border-color:#444; }
+        .gesture-card .name { font-size:14px; font-weight:500; }
+        .gesture-card .meta { font-size:11px; color:#888; }
+        .gesture-card .actions { display:flex; gap:4px; }
+        .mapping-card { padding:14px; background:#1a1a24; border:1px solid #282830; border-radius:8px; margin-bottom:10px; }
+        .mapping-card .gesture-label { font-size:14px; font-weight:600; color:#6366f1; margin-bottom:10px; }
+        .action-type-tabs { display:flex; gap:4px; margin-bottom:10px; flex-wrap:wrap; }
+        .action-type-tab { padding:5px 10px; font-size:11px; border-radius:6px; background:#0a0a0f; border:1px solid #333; color:#888; cursor:pointer; transition:all 0.15s; }
+        .action-type-tab:hover { border-color:#6366f1; color:#ccc; }
+        .action-type-tab.active { background:#6366f1; border-color:#6366f1; color:#fff; }
+        .action-config { margin-top:8px; }
+        .action-config label { font-size:11px; color:#888; display:block; margin-bottom:4px; }
+        .action-config .hint { font-size:10px; color:#555; margin-top:-4px; margin-bottom:8px; }
+        .action-config .row { display:flex; gap:8px; }
+        .test-panel { text-align:center; padding-top:20px; }
+        .test-gesture-display { font-size:40px; font-weight:700; color:#4ade80; margin:24px 0; min-height:50px; }
+        .test-action-display { font-size:16px; color:#6366f1; margin-bottom:16px; min-height:24px; }
+        .test-log { text-align:left; max-height:300px; overflow-y:auto; background:#0a0a0f; border-radius:8px; padding:12px; font-family:'SF Mono',monospace; font-size:12px; line-height:1.6; }
+        .test-log .entry { color:#888; }
+        .test-log .entry .time { color:#555; }
+        .test-log .entry .name { color:#4ade80; font-weight:500; }
+        .test-log .entry .action { color:#6366f1; }
+        .train-status { padding:16px; background:#1a1a24; border-radius:8px; text-align:center; }
+        .train-status .accuracy { font-size:48px; font-weight:700; color:#4ade80; margin:12px 0; }
+        .train-log { margin-top:12px; font-family:'SF Mono',monospace; font-size:11px; color:#888; text-align:left; }
+        .empty-state { text-align:center; padding:32px 16px; color:#555; }
+        .empty-state p { margin:8px 0; font-size:13px; }
+        .callout { padding:10px 12px; border-radius:8px; margin-bottom:12px; font-size:12px; line-height:1.5; }
+        .callout-info { background:#6366f118; border:1px solid #6366f144; color:#a5b4fc; }
+        .recording-indicator { background:#ef444422; border:1px solid #ef4444; border-radius:8px; padding:10px; text-align:center; color:#ef4444; font-weight:600; font-size:14px; margin-bottom:12px; animation: pulse 1s infinite; }
+        @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.6; } }
+        .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(100px); background:#1a1a24; border:1px solid #333; border-radius:10px; padding:10px 20px; font-size:13px; color:#fff; opacity:0; transition:all 0.3s; z-index:100; }
+        .toast.show { transform:translateX(-50%) translateY(0); opacity:1; }
+    </style>
+</head>
+<body>
+<div class="header">
+    <h1>JarvisHands</h1>
+    <div class="status"><div class="status-dot" id="statusDot"></div><span id="statusText">Idle</span></div>
+</div>
+<div class="main">
+    <div class="camera-panel">
+        <img src="/video_feed" alt="Camera Feed" />
+        <div class="gesture-overlay">
+            <div class="gesture-name" id="overlayGesture">--</div>
+            <div class="gesture-conf" id="overlayConf"></div>
+        </div>
+    </div>
+    <div class="side-panel">
+        <div class="tabs">
+            <div class="tab active" data-tab="record">Record</div>
+            <div class="tab" data-tab="map">Map</div>
+            <div class="tab" data-tab="test">Test</div>
+        </div>
+
+        <!-- RECORD TAB -->
+        <div class="tab-content active" id="tab-record">
+            <div class="callout callout-info">
+                Click Start to begin recording. Perform the gesture motion, pause, reset your hand, then repeat. The system auto-detects each rep.
+            </div>
+
+            <div id="recordingStatus"></div>
+
+            <div class="section">
+                <h3>Record Gesture</h3>
+                <input type="text" id="gestureName" placeholder="Gesture name (e.g., swipe_left, wave, circle)" />
+                <div class="row" style="gap:8px; margin-bottom:8px;">
+                    <label style="font-size:12px; color:#888; white-space:nowrap; display:flex; align-items:center; gap:6px;">
+                        Reps: <input type="number" id="targetReps" value="10" min="1" max="50" style="width:60px;" />
+                    </label>
+                </div>
+                <button class="btn btn-danger btn-lg" id="recordBtn">Start Recording</button>
+                <p style="font-size:11px; color:#666; margin-top:6px; text-align:center;">
+                    Auto-captures each gesture rep when motion is detected. Pauses between reps to let you reset.
+                </p>
+            </div>
+
+            <div class="section">
+                <h3>Recorded Gestures</h3>
+                <div class="gesture-list" id="gestureList"></div>
+            </div>
+
+            <div class="section">
+                <h3>Train Model</h3>
+                <button class="btn btn-success btn-lg" id="trainBtn">Train Model</button>
+                <div id="trainResult" style="margin-top:12px;"></div>
+            </div>
+        </div>
+
+        <!-- MAP TAB -->
+        <div class="tab-content" id="tab-map">
+            <div style="margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="font-size:13px; color:#aaa; text-transform:uppercase; letter-spacing:0.5px;">Gesture Mappings</h3>
+                <button class="btn btn-primary btn-sm" id="saveMappingsBtn">Save All</button>
+            </div>
+            <div id="mappingsList"></div>
+        </div>
+
+        <!-- TEST TAB -->
+        <div class="tab-content" id="tab-test">
+            <div class="test-panel">
+                <button class="btn btn-lg" id="testToggle">Start Detection</button>
+                <div class="test-gesture-display" id="testGesture">--</div>
+                <div class="test-action-display" id="testAction"></div>
+                <div class="test-log" id="testLog"></div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+let gestures = [];
+let mappings = {};
+let actions = [];
+let detectionActive = false;
+let isRecording = false;
+let nextLabelId = 0;
+
+async function init() {
+    const [statusRes, actionsRes] = await Promise.all([
+        fetch('/api/status').then(r => r.json()),
+        fetch('/api/actions').then(r => r.json()),
+    ]);
+    gestures = statusRes.gestures;
+    mappings = statusRes.mappings;
+    actions = actionsRes;
+    detectionActive = statusRes.detection_active;
+    if (gestures.length > 0) nextLabelId = Math.max(...gestures.map(g => parseInt(g.id))) + 1;
+    renderGestures();
+    renderMappings();
+    startPolling();
+}
+
+// Tabs
+document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', async () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+        if (tab.dataset.tab === 'map') {
+            await refreshStatus();
+            renderMappings();
+        }
+    });
+});
+
+// --- Recording ---
+const nameInput = document.getElementById('gestureName');
+const recordBtn = document.getElementById('recordBtn');
+
+recordBtn.addEventListener('click', async () => {
+    if (isRecording) {
+        // Stop recording early
+        const res = await fetch('/api/record/stop', {method: 'POST'});
+        const data = await res.json();
+        isRecording = false;
+        recordBtn.textContent = 'Start Recording';
+        recordBtn.classList.remove('btn-primary');
+        recordBtn.classList.add('btn-danger');
+        document.getElementById('recordingStatus').innerHTML = '';
+        toast(`Saved ${data.saved} motion sequences`);
+        await refreshStatus();
+    } else {
+        // Start recording
+        const name = nameInput.value.trim();
+        if (!name) { toast('Enter a gesture name first'); return; }
+        let labelId = null;
+        for (const g of gestures) { if (g.name === name) { labelId = g.id; break; } }
+        if (labelId === null) labelId = String(nextLabelId++);
+        const reps = parseInt(document.getElementById('targetReps').value) || 10;
+
+        await fetch('/api/record/start', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name, id: labelId, reps}),
+        });
+        isRecording = true;
+        recordBtn.textContent = 'Stop Recording';
+        recordBtn.classList.remove('btn-danger');
+        recordBtn.classList.add('btn-primary');
+        updateRecordingStatus('waiting', 0, reps);
+    }
+});
+
+function updateRecordingStatus(phase, repCount, targetReps) {
+    const el = document.getElementById('recordingStatus');
+    if (phase === 'waiting') {
+        el.innerHTML = `<div class="recording-indicator" style="background:#6366f122;border-color:#6366f1;color:#a5b4fc;">
+            Rep ${repCount + 1}/${targetReps} -- Move hand to start gesture</div>`;
+    } else if (phase === 'capturing') {
+        el.innerHTML = `<div class="recording-indicator">
+            CAPTURING rep ${repCount + 1}/${targetReps}...</div>`;
+    } else if (phase === 'cooldown') {
+        el.innerHTML = `<div class="recording-indicator" style="background:#22c55e22;border-color:#22c55e;color:#4ade80;animation:none;">
+            Rep ${repCount}/${targetReps} saved! Reset your hand position...</div>`;
+    } else if (phase === 'done') {
+        el.innerHTML = `<div class="recording-indicator" style="background:#22c55e22;border-color:#22c55e;color:#4ade80;animation:none;">
+            All ${targetReps} reps recorded!</div>`;
+    } else {
+        el.innerHTML = '';
+    }
+}
+
+function renderGestures() {
+    const list = document.getElementById('gestureList');
+    if (gestures.length === 0) {
+        list.innerHTML = '<div class="empty-state"><p>No gestures recorded yet</p></div>';
+        return;
+    }
+    list.innerHTML = gestures.map(g => `
+        <div class="gesture-card">
+            <div>
+                <div class="name">${g.name}</div>
+                <div class="meta">${g.samples} sequences</div>
+            </div>
+            <div class="actions">
+                <button class="btn btn-outline btn-sm" onclick="addMore('${g.name}')">+ More</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteGesture('${g.id}')">Del</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function addMore(name) {
+    nameInput.value = name;
+    recordBtn.disabled = false;
+    toast(`Selected "${name}" -- click Start Recording to add more`);
+}
+
+async function deleteGesture(id) {
+    if (!confirm('Delete this gesture and all its data?')) return;
+    await fetch('/api/delete_gesture', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id})});
+    await refreshStatus();
+    renderMappings();
+    toast('Gesture deleted');
+}
+
+// --- Training ---
+document.getElementById('trainBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('trainBtn');
+    btn.textContent = 'Training...';
+    btn.disabled = true;
+    const res = await fetch('/api/train', {method: 'POST'});
+    const data = await res.json();
+    btn.textContent = 'Train Model';
+    btn.disabled = false;
+    if (data.ok) {
+        document.getElementById('trainResult').innerHTML = `
+            <div class="train-status">
+                <div style="font-size:12px;color:#888;">Model Accuracy</div>
+                <div class="accuracy">${data.accuracy}%</div>
+                <div style="font-size:12px;color:#666;">${data.samples} sequences, ${data.classes} gestures</div>
+                <div class="train-log">${data.log.map(l => `Epoch ${l.epoch}: loss=${l.loss} acc=${l.accuracy}%`).join('<br>')}</div>
+            </div>`;
+        await refreshStatus();
+        renderMappings();
+        toast('Model trained!');
+    } else {
+        toast('Training failed: ' + (data.error || 'unknown'));
+    }
+});
+
+// --- Mappings ---
+function renderMappings() {
+    const list = document.getElementById('mappingsList');
+    if (gestures.length === 0) {
+        list.innerHTML = '<div class="empty-state"><p>Record gestures first.</p></div>';
+        return;
+    }
+    list.innerHTML = gestures.map(g => {
+        const cur = mappings[g.name] || {};
+        const at = cur.type || 'none';
+        return `
+        <div class="mapping-card" data-gesture="${g.name}">
+            <div class="gesture-label">${g.name} <span style="color:#888;font-weight:400;">(${g.samples} seq)</span></div>
+            <div class="action-type-tabs">
+                <div class="action-type-tab ${at==='none'?'active':''}" data-atype="none">None</div>
+                <div class="action-type-tab ${at==='preset'||(at!=='none'&&at!=='keystroke'&&at!=='shell'&&at!=='url'&&at!=='window'&&at!=='lua'&&cur._preset)?'active':''}" data-atype="preset">Preset</div>
+                <div class="action-type-tab ${at==='keystroke'&&!cur._preset?'active':''}" data-atype="keystroke">Hotkey</div>
+                <div class="action-type-tab ${at==='shell'?'active':''}" data-atype="shell">Command</div>
+                <div class="action-type-tab ${at==='url'?'active':''}" data-atype="url">URL / Raycast</div>
+                <div class="action-type-tab ${at==='window'?'active':''}" data-atype="window">Window</div>
+                <div class="action-type-tab ${at==='lua'?'active':''}" data-atype="lua">Lua Script</div>
+            </div>
+            <div class="action-config" id="config-${g.name}">${renderConfig(g.name, at, cur)}</div>
+        </div>`;
+    }).join('');
+    // Wire tabs
+    document.querySelectorAll('.mapping-card').forEach(card => {
+        const gn = card.dataset.gesture;
+        card.querySelectorAll('.action-type-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                card.querySelectorAll('.action-type-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById('config-'+gn).innerHTML = renderConfig(gn, tab.dataset.atype, {});
+            });
+        });
+    });
+}
+
+function renderConfig(gn, at, cur) {
+    if (at==='none') return '<p style="color:#555;font-size:12px;">No action.</p>';
+    if (at==='preset') {
+        let sel='none';
+        if(cur.type&&cur.type!=='none'){for(const a of actions){let m=true;if(a.type==='keystroke')m=a.key===cur.key&&JSON.stringify(a.mods)===JSON.stringify(cur.mods);else if(a.type==='app')m=a.app===cur.app;else if(a.type==='window')m=a.operation===cur.operation;else if(a.type==='shell')m=a.command===cur.command;else m=a.type===cur.type;if(m){sel=a.id;break;}}}
+        return `<select data-field="preset"><option value="none">-- Pick --</option>
+            <optgroup label="Window">${actions.filter(a=>a.type==='window').map(a=>`<option value="${a.id}" ${sel===a.id?'selected':''}>${a.display}</option>`).join('')}</optgroup>
+            <optgroup label="Desktop">${actions.filter(a=>['mission_control','desktop_left','desktop_right','app_expose','app_switcher'].includes(a.id)).map(a=>`<option value="${a.id}" ${sel===a.id?'selected':''}>${a.display}</option>`).join('')}</optgroup>
+            <optgroup label="System">${actions.filter(a=>['spotlight','launchpad','screenshot','screenshot_region'].includes(a.id)).map(a=>`<option value="${a.id}" ${sel===a.id?'selected':''}>${a.display}</option>`).join('')}</optgroup>
+            <optgroup label="Media">${actions.filter(a=>['volume_up','volume_down','play_pause'].includes(a.id)).map(a=>`<option value="${a.id}" ${sel===a.id?'selected':''}>${a.display}</option>`).join('')}</optgroup>
+            <optgroup label="Edit">${actions.filter(a=>['undo','redo','copy','paste','close_window'].includes(a.id)).map(a=>`<option value="${a.id}" ${sel===a.id?'selected':''}>${a.display}</option>`).join('')}</optgroup>
+        </select>`;
+    }
+    if (at==='keystroke') {
+        const mods=(cur.mods||[]).join(','), key=cur.key||'';
+        return `<label>Modifiers</label>
+            <div class="row" style="margin-bottom:8px;">
+                <label style="display:inline;font-size:12px;"><input type="checkbox" data-mod="cmd" ${mods.includes('cmd')?'checked':''}> Cmd</label>
+                <label style="display:inline;font-size:12px;"><input type="checkbox" data-mod="ctrl" ${mods.includes('ctrl')?'checked':''}> Ctrl</label>
+                <label style="display:inline;font-size:12px;"><input type="checkbox" data-mod="alt" ${mods.includes('alt')?'checked':''}> Opt</label>
+                <label style="display:inline;font-size:12px;"><input type="checkbox" data-mod="shift" ${mods.includes('shift')?'checked':''}> Shift</label>
+            </div>
+            <label>Key</label><input type="text" data-field="key" placeholder="space, a, up, f1..." value="${key}" />
+            <div class="hint">For Raycast: set your Raycast hotkey here (e.g., cmd+space)</div>`;
+    }
+    if (at==='shell') return `<label>Shell command or script path</label><textarea data-field="command" placeholder="/path/to/script.sh&#10;osascript -e '...'&#10;open -a Safari">${cur.command||''}</textarea><div class="hint">Runs via Hammerspoon hs.execute(). Full shell access.</div>`;
+    if (at==='url') return `<label>URL or deeplink</label><input type="text" data-field="url" placeholder="raycast://extensions/..." value="${cur.url||''}" /><div class="hint">raycast://... | shortcuts://run-shortcut?name=... | obsidian://... | any URL</div>`;
+    if (at==='window') { const op=cur.operation||'maximize'; return `<select data-field="operation"><option value="maximize" ${op==='maximize'?'selected':''}>Maximize</option><option value="minimize" ${op==='minimize'?'selected':''}>Minimize</option><option value="left_half" ${op==='left_half'?'selected':''}>Left Half</option><option value="right_half" ${op==='right_half'?'selected':''}>Right Half</option><option value="close" ${op==='close'?'selected':''}>Close</option></select>`; }
+    if (at==='lua') return `<label>Hammerspoon Lua code</label><textarea data-field="code" placeholder="hs.alert.show('Hello!')&#10;-- Full Hammerspoon API">${cur.code||''}</textarea><div class="hint">Runs directly in Hammerspoon. hs.window, hs.application, hs.eventtap, etc.</div>`;
+    return '';
+}
+
+function collectMapping(gn) {
+    const card = document.querySelector(`.mapping-card[data-gesture="${gn}"]`);
+    if (!card) return null;
+    const at = card.querySelector('.action-type-tab.active')?.dataset.atype;
+    if (!at || at==='none') return null;
+    const cfg = document.getElementById('config-'+gn);
+    if (at==='preset') { const s=cfg.querySelector('[data-field="preset"]'); if(!s||s.value==='none')return null; const a=actions.find(x=>x.id===s.value); return a?{...a,_preset:true}:null; }
+    if (at==='keystroke') { const m=[]; cfg.querySelectorAll('[data-mod]').forEach(c=>{if(c.checked)m.push(c.dataset.mod);}); const k=(cfg.querySelector('[data-field="key"]')?.value||'').trim(); if(!k)return null; return {type:'keystroke',display:'Hotkey: '+(m.length?m.join('+')+'+':'')+k,mods:m,key:k}; }
+    if (at==='shell') { const c=(cfg.querySelector('[data-field="command"]')?.value||'').trim(); if(!c)return null; return {type:'shell',display:'Cmd: '+c.substring(0,50),command:c}; }
+    if (at==='url') { const u=(cfg.querySelector('[data-field="url"]')?.value||'').trim(); if(!u)return null; return {type:'url',display:'URL: '+u.substring(0,50),url:u}; }
+    if (at==='window') { const o=cfg.querySelector('[data-field="operation"]')?.value||'maximize'; return {type:'window',display:'Window: '+o,operation:o}; }
+    if (at==='lua') { const c=(cfg.querySelector('[data-field="code"]')?.value||'').trim(); if(!c)return null; return {type:'lua',display:'Lua: '+c.split('\n')[0].substring(0,40),code:c}; }
+    return null;
+}
+
+document.getElementById('saveMappingsBtn').addEventListener('click', async () => {
+    const nm = {};
+    gestures.forEach(g => { const m=collectMapping(g.name); if(m) nm[g.name]=m; });
+    await fetch('/api/mappings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({mappings:nm})});
+    mappings = nm;
+    toast('Mappings saved & Hammerspoon reloaded');
+});
+
+// --- Test ---
+const testToggle = document.getElementById('testToggle');
+testToggle.addEventListener('click', async () => {
+    detectionActive = !detectionActive;
+    await fetch('/api/detection', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({active:detectionActive})});
+    testToggle.textContent = detectionActive ? 'Stop Detection' : 'Start Detection';
+    testToggle.classList.toggle('btn-danger', detectionActive);
+    testToggle.classList.toggle('btn-success', !detectionActive);
+    document.getElementById('statusDot').classList.toggle('active', detectionActive);
+    document.getElementById('statusText').textContent = detectionActive ? 'Detecting' : 'Idle';
+});
+
+// --- Polling ---
+let lastG = null;
+function startPolling() {
+    setInterval(async () => {
+        try {
+            const d = await fetch('/api/status').then(r=>r.json());
+            const og=document.getElementById('overlayGesture'), oc=document.getElementById('overlayConf');
+            const tg=document.getElementById('testGesture'), ta=document.getElementById('testAction');
+            if (d.current_gesture) {
+                og.textContent=d.current_gesture; oc.textContent=`${Math.round(d.current_confidence*100)}%`;
+                tg.textContent=d.current_gesture;
+                const m=mappings[d.current_gesture]; ta.textContent=m?m.display:'No action mapped';
+                if (d.current_gesture!==lastG && d.detection_active) {
+                    const log=document.getElementById('testLog'), t=new Date().toLocaleTimeString();
+                    log.innerHTML=`<div class="entry"><span class="time">${t}</span> <span class="name">${d.current_gesture}</span> <span class="action">${m?m.display:'unmapped'}</span></div>`+log.innerHTML;
+                    lastG=d.current_gesture;
+                }
+            } else { og.textContent='--'; oc.textContent=''; tg.textContent='--'; ta.textContent=''; lastG=null; }
+            document.getElementById('statusDot').classList.toggle('active', d.detection_active);
+            document.getElementById('statusText').textContent = d.detection_active?'Detecting':'Idle';
+
+            // Update recording status from server
+            if (isRecording && d.recording_phase) {
+                updateRecordingStatus(d.recording_phase, d.rep_count, d.target_reps);
+            }
+            // Auto-stop when server says recording is done
+            if (isRecording && !d.recording_active) {
+                isRecording = false;
+                recordBtn.textContent = 'Start Recording';
+                recordBtn.classList.remove('btn-primary');
+                recordBtn.classList.add('btn-danger');
+                // Save sequences
+                fetch('/api/record/stop', {method:'POST'}).then(r=>r.json()).then(data=>{
+                    toast(`Saved ${data.saved} motion sequences`);
+                    refreshStatus();
+                });
+                setTimeout(()=>document.getElementById('recordingStatus').innerHTML='', 3000);
+            }
+        } catch(e){}
+    }, 300);
+}
+
+async function refreshStatus() {
+    const d = await fetch('/api/status').then(r=>r.json());
+    gestures=d.gestures; mappings=d.mappings;
+    if(gestures.length>0) nextLabelId=Math.max(...gestures.map(g=>parseInt(g.id)))+1;
+    renderGestures();
+}
+
+function toast(msg) { const e=document.getElementById('toast'); e.textContent=msg; e.classList.add('show'); setTimeout(()=>e.classList.remove('show'),2500); }
+
+// Spacebar to skip cooldown during recording
+document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && isRecording && !e.target.matches('input,textarea,select')) {
+        e.preventDefault();
+        fetch('/api/record/next', {method:'POST'});
+    }
+});
+
+init();
+</script>
+</body>
+</html>
