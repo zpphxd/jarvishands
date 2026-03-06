@@ -1,47 +1,129 @@
 # JarvisHands
 
-Custom hand gesture recognition for macOS control via Hammerspoon.
+Custom hand gesture recognition for macOS. Record your own gestures, train a classifier, map them to any macOS action — all controlled through Hammerspoon.
 
-Record your own gestures, train a classifier, map them to any macOS action.
+Two interfaces:
+- **CLI** (`gesture_detector.py`) — lightweight static pose recognition with a numpy-only MLP
+- **Web UI** (`app.py`) — full-featured motion gesture engine with DTW, live camera preview, recording, training, and action mapping in the browser
 
-Uses MediaPipe for hand tracking and a lightweight MLP neural network (pure numpy, no TensorFlow needed) for gesture classification. Inspired by [Kazuhito00/hand-gesture-recognition-using-mediapipe](https://github.com/Kazuhito00/hand-gesture-recognition-using-mediapipe).
+Both use MediaPipe for hand tracking and send recognized gestures to Hammerspoon via the `hs` CLI.
 
-## Setup
+## Requirements
+
+- macOS with a webcam
+- Python 3.10+
+- [Hammerspoon](https://www.hammerspoon.org/) with the `hs` CLI installed (`/opt/homebrew/bin/hs` or `/usr/local/bin/hs`)
+- [Hammerspoon IPC module](http://www.hammerspoon.org/docs/hs.ipc.html) (`require("hs.ipc")` in your `init.lua`)
+
+## Installation
 
 ```bash
+git clone https://github.com/zpphxd/jarvishands.git
+cd jarvishands
 pip3 install -r requirements.txt
 ```
 
+Download the MediaPipe hand landmarker model (not included in repo):
+
+```bash
+curl -L -o hand_landmarker.task \
+  https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task
+```
+
+### Hammerspoon setup
+
 Copy `gestures.lua` to `~/.hammerspoon/` and add to your `init.lua`:
+
 ```lua
+require("hs.ipc")
+
 local gestures = require("gestures")
 gestures.bindHotkeys()
 ```
 
-## Workflow
+Reload Hammerspoon. Press **Ctrl+Cmd+G** to toggle gesture detection on/off.
 
-### 1. Record gestures
+## Quick start
+
+### CLI workflow
 
 ```bash
+# 1. Record — camera opens, press 0-9 to label hand poses
 python3 gesture_detector.py --record
+
+# 2. Train — builds the MLP classifier
+python3 gesture_detector.py --train
+
+# 3. Test — run with camera preview to verify
+python3 gesture_detector.py --run --preview
+
+# 4. Activate — Ctrl+Cmd+G in Hammerspoon starts headless detection
 ```
 
-A camera window opens with your hand tracked. Press number keys (0-9) to label the current hand pose. First time you press a number, you'll name the gesture. Record **20-50 samples** per gesture with slight variations (angle, distance, hand rotation).
-
-### 2. Train the model
+### Web UI workflow
 
 ```bash
-python3 gesture_detector.py --train
+# Start the web server
+python3 app.py
+
+# Open http://localhost:5757
 ```
 
-Trains a 3-layer MLP on your recorded data. Takes a few seconds.
+The web UI provides a single-page interface for the full workflow:
 
-### 3. Map gestures to actions
+1. **Record** — live camera feed, click to start/stop recording gesture sequences
+2. **Train** — one-click DTW model training with data augmentation
+3. **Map** — assign Hammerspoon actions to each gesture from the browser
+4. **Detect** — toggle live detection and see recognized gestures in real time
 
-Edit `~/.hammerspoon/gestures.lua` — add entries to `M.mappings`:
+## Architecture
+
+### Detection pipeline
+
+```
+Webcam → MediaPipe HandLandmarker → 21 landmarks (x,y per joint)
+  → Normalize (wrist-relative, scale-invariant)
+  → Feature extraction (25-dim: angles, distances, curls)
+  → Classification → Hammerspoon IPC → macOS action
+```
+
+### CLI classifier (gesture_detector.py)
+
+- **Input:** 42-dim vector (21 landmarks × 2 coordinates), normalized to wrist origin
+- **Model:** 3-layer MLP (42→64→64→N), trained with SGD + momentum
+- **Trigger logic:** gesture must be stable for 6 consecutive frames at >85% confidence, with a 1s cooldown per gesture
+- **No external ML frameworks** — pure numpy forward/backward pass
+
+### Web UI classifier (app.py)
+
+- **Input:** 25-dim feature vector per frame (finger curls, inter-finger angles, palm ratios)
+- **Smoothing:** One Euro Filter on raw landmarks to reduce jitter
+- **Model:** Dynamic Time Warping (DTW) against recorded template sequences
+- **Data augmentation:** 8 augmented copies per template (noise, scaling, time warping)
+- **Trigger logic:** temporal voting across recent frames, adaptive per-gesture thresholds
+- **Aim Mode:** point-to-target cursor control using index finger direction, with a "fire" gesture to click/close windows
+
+### Hammerspoon integration (gestures.lua)
+
+The Lua module handles:
+- **Lifecycle:** start/stop the Python detector as a background process
+- **Gesture dispatch:** receives gesture names via `hs` CLI IPC, looks up action mappings
+- **Status overlay:** persistent canvas indicator showing active state and recognized gestures
+- **Aim Mode:** crosshair overlay, mouse cursor tracking, and click-to-close on fire
+- **Mappings:** loaded from `~/.jarvishands/mappings.lua` (auto-generated by the web UI)
+
+## Gesture mapping
+
+### Via the web UI
+
+Use the **Mappings** tab to assign Hammerspoon Lua code to each gesture. The web UI writes `~/.jarvishands/mappings.lua` which is loaded automatically.
+
+### Manually
+
+Create `~/.jarvishands/mappings.lua`:
 
 ```lua
-M.mappings = {
+return {
     open_palm = {
         name = "Mission Control",
         action = function() hs.eventtap.keyStroke({"ctrl"}, "up") end,
@@ -54,38 +136,63 @@ M.mappings = {
         end,
     },
     point_right = {
-        name = "Desktop Right",
+        name = "Next Desktop",
         action = function() hs.eventtap.keyStroke({"ctrl"}, "right") end,
     },
 }
 ```
 
-Keys must match the gesture names you chose during recording.
+Keys must match the gesture names from recording.
 
-### 4. Activate
+## CLI reference
 
-Press **Ctrl+Cmd+G** to toggle gesture mode on/off.
-
-### Other commands
-
-```bash
-python3 gesture_detector.py --list              # List recorded gestures
-python3 gesture_detector.py --run --preview      # Test live with camera window
-python3 gesture_detector.py --delete <name>      # Remove a gesture
 ```
-
-## How it works
-
-1. MediaPipe detects 21 hand landmarks from the webcam
-2. Landmarks are normalized (wrist-relative, scale-invariant) into a 42-dim vector
-3. A simple MLP classifier (numpy-only, no heavy ML frameworks) predicts the gesture
-4. Gestures must be held stable for ~6 frames and exceed 85% confidence to trigger
-5. Recognized gestures are sent to Hammerspoon via the `hs` CLI (IPC)
-6. Hammerspoon executes the mapped action
+gesture_detector.py --record              Record hand poses (camera + keyboard)
+gesture_detector.py --train               Train the MLP classifier
+gesture_detector.py --run                 Live detection (headless)
+gesture_detector.py --run --preview       Live detection with camera window
+gesture_detector.py --list                List recorded gestures and sample counts
+gesture_detector.py --delete <name>       Delete a gesture and its training data
+```
 
 ## Data storage
 
-All data lives in `~/.jarvishands/`:
-- `keypoints.csv` — training samples (label_id + 42 normalized landmark values)
-- `labels.json` — mapping of label IDs to gesture names
-- `model.pkl` — trained MLP model
+All user data lives in `~/.jarvishands/`:
+
+| File | Purpose |
+|------|---------|
+| `keypoints.csv` | CLI training data (label + 42-dim landmark vectors) |
+| `labels.json` | Gesture ID → name mapping (CLI) |
+| `model.pkl` | Trained MLP model (CLI) |
+| `sequences/` | Recorded gesture sequences (web UI, DTW) |
+| `mappings.json` | Gesture → action mapping config (web UI) |
+| `mappings.lua` | Auto-generated Lua mappings for Hammerspoon |
+| `poses.json` | Aim mode calibration profiles |
+| `debug.log` | Web UI debug log |
+
+## Project structure
+
+```
+jarvishands/
+├── gesture_detector.py    # CLI: record, train, detect (MLP-based)
+├── app.py                 # Web UI: Flask server with DTW engine
+├── gestures.lua           # Hammerspoon module (copy to ~/.hammerspoon/)
+├── templates/
+│   └── index.html         # Web UI single-page app
+├── hand_landmarker.task   # MediaPipe model (download separately)
+├── requirements.txt       # Python dependencies
+└── static/                # Web UI assets
+```
+
+## Dependencies
+
+- **mediapipe** — hand landmark detection
+- **opencv-python** — camera capture and frame processing
+- **numpy** — MLP classifier and feature math
+- **flask** — web UI server
+- **dtw-python** — Dynamic Time Warping for motion gesture matching
+- **scipy** — sequence interpolation for DTW resampling
+
+## Credits
+
+Inspired by [Kazuhito00/hand-gesture-recognition-using-mediapipe](https://github.com/Kazuhito00/hand-gesture-recognition-using-mediapipe).
