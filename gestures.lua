@@ -80,6 +80,8 @@ function gestureReceived(gesture)
         hs.timer.doAfter(1.5, function()
             if active then
                 showIndicator("JarvisHands Active", {0.2, 0.4, 0.8})
+            else
+                hideIndicator()
             end
         end)
         mapping.action()
@@ -88,10 +90,94 @@ function gestureReceived(gesture)
         hs.timer.doAfter(1.5, function()
             if active then
                 showIndicator("JarvisHands Active", {0.2, 0.4, 0.8})
+            else
+                hideIndicator()
             end
         end)
         print("[gestures] Unmapped gesture: " .. gesture)
     end
+end
+
+-- ─── Aim Mode (called from Python via hs CLI) ───────────────────────
+local aimCanvas = nil
+local aimActive = false
+
+function jarvisAimEnter()
+    aimActive = true
+    showIndicator("AIM MODE", {0.0, 0.8, 0.9})
+    print("[gestures] Aim mode entered")
+end
+
+function jarvisAimUpdate(x, y)
+    if not aimActive then return end
+    -- x,y are 0-1 normalized from camera (mirrored). Convert to screen coords.
+    local screen = hs.screen.mainScreen():frame()
+    -- Camera x is mirrored, so 0=right, 1=left in camera view
+    local sx = screen.x + x * screen.w
+    local sy = screen.y + y * screen.h
+
+    -- Move the actual mouse cursor so it selects windows naturally
+    hs.mouse.absolutePosition({x = sx, y = sy})
+
+    -- Draw crosshair overlay
+    if aimCanvas then aimCanvas:delete() end
+    local size = 40
+    aimCanvas = hs.canvas.new({x = sx - size/2, y = sy - size/2, w = size, h = size})
+    aimCanvas:appendElements(
+        {type = "circle", center = {x = size/2, y = size/2}, radius = size/2 - 2,
+         strokeColor = {red = 0, green = 1, blue = 1, alpha = 0.8}, strokeWidth = 2,
+         fillColor = {alpha = 0}},
+        {type = "segments", coordinates = {{x = size/2, y = 2}, {x = size/2, y = size - 2}},
+         strokeColor = {red = 0, green = 1, blue = 1, alpha = 0.8}, strokeWidth = 1.5},
+        {type = "segments", coordinates = {{x = 2, y = size/2}, {x = size - 2, y = size/2}},
+         strokeColor = {red = 0, green = 1, blue = 1, alpha = 0.8}, strokeWidth = 1.5},
+        {type = "circle", center = {x = size/2, y = size/2}, radius = 3,
+         fillColor = {red = 0, green = 1, blue = 1, alpha = 0.9}}
+    )
+    aimCanvas:level(hs.canvas.windowLevels.overlay + 1)
+    aimCanvas:show()
+end
+
+function jarvisAimFire(x, y)
+    if not aimActive then return end
+    aimActive = false
+
+    local screen = hs.screen.mainScreen():frame()
+    local sx = screen.x + x * screen.w
+    local sy = screen.y + y * screen.h
+
+    -- Move mouse to target position
+    hs.mouse.absolutePosition({x = sx, y = sy})
+
+    -- Click to select/focus the window under cursor
+    hs.eventtap.leftClick({x = sx, y = sy})
+
+    -- Brief delay then quit the focused app
+    hs.timer.doAfter(0.15, function()
+        local win = hs.window.focusedWindow()
+        if win then
+            local app = win:application()
+            local appName = app and app:name() or "unknown"
+            showIndicator("QUIT: " .. appName, {0.9, 0.2, 0.2})
+            -- Close the window (Cmd+W). Use app:kill() for full quit.
+            win:close()
+            print("[gestures] Closed window: " .. appName)
+        end
+    end)
+
+    -- Clean up crosshair
+    if aimCanvas then aimCanvas:delete(); aimCanvas = nil end
+
+    hs.timer.doAfter(1.5, function()
+        hideIndicator()
+    end)
+end
+
+function jarvisAimExit()
+    aimActive = false
+    if aimCanvas then aimCanvas:delete(); aimCanvas = nil end
+    hideIndicator()
+    print("[gestures] Aim mode exited")
 end
 
 -- ─── Start / Stop ─────────────────────────────────────────────────
